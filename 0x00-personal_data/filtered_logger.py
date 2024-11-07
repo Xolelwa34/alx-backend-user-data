@@ -12,54 +12,79 @@ import csv
 from typing import List
 
 
-class MaskingFormatter(logging.Formatter):
+class RedactingFormatter(logging.Formatter):
     """
     Formatter to mask specified PII fields in log messages.
     """
-    MASK = "[REDACTED]"
-    LOG_FORMAT = "[APPLICATION] %(name)s %(levelname)s %(asctime)-15s: %(message)s"
-    FIELD_SEPARATOR = ";"
+    REDACTION = "***"
+    FORMAT = "[HOLBERTON] %(name)s %(levelname)s %(asctime)-15s: %(message)s"
+    SEPARATOR = ";"
 
-    def __init__(self, sensitive_fields: List[str]):
+    def __init__(self, fields: List[str]):
         """
-        Initializes the formatter with fields to mask.
+        Initializes the RedactingFormatter with a list of fields to redact.
         """
-        self.sensitive_fields = sensitive_fields
-        super().__init__(self.LOG_FORMAT)
+        self.fields = fields
+        super().__init__(self.FORMAT)
 
     def format(self, record: logging.LogRecord) -> str:
         """
-        Applies masking to specified fields in a log record.
+        Formats a log record.
         """
-        original_message = super().format(record)
-        return mask_fields(self.sensitive_fields, self.MASK, original_message, self.FIELD_SEPARATOR)
+        result = super().format(record)
+        return filter_datum(
+            self.fields,
+            self.REDACTION,
+            result,
+            self.SEPARATOR)
 
 
-# Fields that contain PII information
 PII_FIELDS = ('name', 'email', 'password', 'ssn', 'phone')
 
 
-def mask_fields(fields: List[str], mask: str, text: str, separator: str) -> str:
+def filter_datum(fields: List[str],
+                 redaction: str,
+                 message: str,
+                 separator: str) -> str:
     """
-    Masks specified fields within the provided text.
+    Returns regx
     """
-    for field in fields:
-        text = re.sub(f"{field}=.*?{separator}", f"{field}={mask}{separator}", text)
-    return text
+    for item in fields:
+        message = re.sub(item + '=.*?' + separator, item + '=' +
+                         redaction + separator, message)
+    return message
 
 
-def configure_user_logger() -> logging.Logger:
+def create_user_data_logger() -> logging.Logger:
     """
-    Sets up a logger dedicated to handling sensitive user data.
+    configures a logger.
     """
-    logger = logging.getLogger('user_info')
+    logger = logging.getLogger('user_data')
     logger.setLevel(logging.INFO)
     logger.propagate = False
 
+    target_handler = logging.StreamHandler()
+    target_handler.setLevel(logging.INFO)
+
+    formatter = RedactingFormatter(PII_FIELDS)
+    target_handler.setFormatter(formatter)
+
+    logger.addHandler(target_handler)
+
+    return logger
+
+
+def get_logger() -> logging.Logger:
+    """
+    Creates and configures processing.
+    """
+    logger = logging.getLogger("user_data")
+    logger.setLevel(logging.INFO)
+    logger.propagate = False
+
+    formatter = RedactingFormatter(PII_FIELDS)
     stream_handler = logging.StreamHandler()
     stream_handler.setLevel(logging.INFO)
-
-    formatter = MaskingFormatter(PII_FIELDS)
     stream_handler.setFormatter(formatter)
 
     logger.addHandler(stream_handler)
@@ -69,15 +94,16 @@ def configure_user_logger() -> logging.Logger:
 
 def main() -> None:
     """
-    Reads data from CSV, applies masking, and logs entries.
+    Main data from a CSV file, formats it, and logs it with redacted PII.
     """
-    user_logger = configure_user_logger()
+    logger = get_logger()
 
     with open("user_data.csv", newline='') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:
-            log_message = '; '.join([f"{key}={value}" for key, value in row.items()])
-            user_logger.info(log_message)
+            fields = '; '.join(
+                    [f"{key}={value}" for key, value in row.items()])
+            logger.info(fields)
 
 
 if __name__ == "__main__":
