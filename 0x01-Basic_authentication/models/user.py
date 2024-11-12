@@ -1,59 +1,67 @@
 #!/usr/bin/env python3
-""" User module
-"""
-import hashlib
-from models.base import Base
+"""Main authentication module"""
 
+from flask import request
+from typing import List, TypeVar
 
-class User(Base):
-    """ User class
-    """
+class Auth:
+    """Primary authentication class to manage access control and user validation."""
 
-    def __init__(self, *args: list, **kwargs: dict):
-        """ Initialize a User instance
+    def require_auth(self, path: str, excluded_paths: List[str]) -> bool:
         """
-        super().__init__(*args, **kwargs)
-        self.email = kwargs.get('email')
-        self._password = kwargs.get('_password')
-        self.first_name = kwargs.get('first_name')
-        self.last_name = kwargs.get('last_name')
+        Determines if a given path requires authentication.
 
-    @property
-    def password(self) -> str:
-        """ Getter of the password
-        """
-        return self._password
+        Args:
+            path (str): Path of the current request.
+            excluded_paths (List[str]): Paths that bypass authentication.
 
-    @password.setter
-    def password(self, pwd: str):
-        """ Setter of a new password: encrypt in SHA256
+        Returns:
+            bool: Returns True if path requires authentication, False otherwise.
         """
-        if pwd is None or type(pwd) is not str:
-            self._password = None
-        else:
-            self._password = hashlib.sha256(pwd.encode()).hexdigest().lower()
+        # Return True if path is None
+        if path is None:
+            return True
 
-    def is_valid_password(self, pwd: str) -> bool:
-        """ Validate a password
-        """
-        if pwd is None or type(pwd) is not str:
-            return False
-        if self.password is None:
-            return False
-        pwd_e = pwd.encode()
-        return hashlib.sha256(pwd_e).hexdigest().lower() == self.password
+        # Return True if excluded_paths is None or empty
+        if not excluded_paths:
+            return True
 
-    def display_name(self) -> str:
-        """ Display User name based on email/first_name/last_name
+        # Ensure path ends with a trailing slash for consistent comparison
+        normalized_path = path if path.endswith('/') else path + '/'
+
+        # Check if the normalized path matches any of the excluded paths
+        for excluded_path in excluded_paths:
+            if excluded_path.endswith('/'):
+                if normalized_path == excluded_path:
+                    return False
+            elif path == excluded_path or path == excluded_path + '/':
+                return False
+
+        return True
+
+    def authorization_header(self, request=None) -> str:
         """
-        if self.email is None and self.first_name is None \
-                and self.last_name is None:
-            return ""
-        if self.first_name is None and self.last_name is None:
-            return "{}".format(self.email)
-        if self.last_name is None:
-            return "{}".format(self.first_name)
-        if self.first_name is None:
-            return "{}".format(self.last_name)
-        else:
-            return "{} {}".format(self.first_name, self.last_name)
+        Fetches the authorization header from a request object.
+
+        Args:
+            request: Flask request object containing request headers.
+
+        Returns:
+            str: Returns the authorization header as a string, or None if absent.
+        """
+        if request is None:
+            return None
+        return request.headers.get("Authorization")
+
+    def current_user(self, request=None) -> TypeVar('User'):
+        """
+        Identifies the current user associated with the provided request.
+
+        Args:
+            request: The Flask request object to extract user information.
+
+        Returns:
+            TypeVar('User'): Represents the current user or None if not identified.
+        """
+        return None
+
